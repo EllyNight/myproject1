@@ -5,13 +5,9 @@ import pymysql
 import plotly.express as px
 from dotenv import load_dotenv
 
-# .env 로드
-load_dotenv()
-DB_HOST = os.getenv('DB_HOST')
-DB_USER = os.getenv('DB_USER')
-DB_PASSWORD = os.getenv('DB_PASSWORD')
-DB_NAME = os.getenv('DB_NAME')
-
+# ==========================================
+# 1. UI/UX 디자인 설정 (Custom CSS)
+# ==========================================
 def apply_custom_css():
     st.markdown("""
         <style>
@@ -36,6 +32,15 @@ def apply_custom_css():
         </style>
     """, unsafe_allow_html=True)
 
+# ==========================================
+# 2. 데이터베이스 연결 및 데이터 로드 함수
+# ==========================================
+load_dotenv()
+DB_HOST = os.getenv('DB_HOST')
+DB_USER = os.getenv('DB_USER')
+DB_PASSWORD = os.getenv('DB_PASSWORD')
+DB_NAME = os.getenv('DB_NAME')
+
 @st.cache_resource
 def init_connection():
     return pymysql.connect(
@@ -58,13 +63,20 @@ def load_data(_conn, query_or_table):
         result = cursor.fetchall()
     return pd.DataFrame(result)
 
+# ==========================================
+# 3. 메인 앱 실행
+# ==========================================
 def main():
     st.set_page_config(page_title="자동차 통합 정보 포털", page_icon="🚘", layout="wide")
     apply_custom_css()
     
     st.sidebar.title("🧭 네비게이션")
-    page = st.sidebar.radio("메뉴를 선택하세요", ["🏠 메인 개요 (Home)", "📊 자동차 등록현황 대시보드", "💬 현대/기아 FAQ 검색"])
+    # 메뉴 이름 수정: 현대/기아 -> 기업별
+    page = st.sidebar.radio("메뉴를 선택하세요", ["🏠 메인 개요 (Home)", "📊 자동차 등록현황 대시보드", "💬 기업별 FAQ 검색"])
     
+    # ------------------------------------------
+    # 페이지 1: 메인 개요 
+    # ------------------------------------------
     if page == "🏠 메인 개요 (Home)":
         st.title("대한민국 자동차 통합 정보 포털 🚘")
         st.markdown("<p style='font-size: 18px; color: #666;'>국내 자동차 등록 통계부터 주요 브랜드의 고객지원 정보까지 한 곳에서 확인하세요.</p>", unsafe_allow_html=True)
@@ -85,15 +97,18 @@ def main():
         with col2:
             st.markdown("""
             <div class="info-card">
-                <h4>💬 현대/기아 FAQ 스마트 검색</h4>
-                <p>현대자동차와 기아의 공식 웹사이트에서 실시간으로 수집된 방대한 고객지원(FAQ) 데이터를 제공합니다.<br>
+                <h4>💬 기업별 FAQ 스마트 검색</h4>
+                <p>현대, 기아, 쉐보레 등 주요 자동차 브랜드의 공식 웹사이트에서 수집된 방대한 고객지원 데이터를 제공합니다.<br>
                 원하는 기업과 카테고리를 선택하면, 차량 구매, 정비, 시스템 업데이트 등에 대한 정확한 답변을 빠르게 열람할 수 있습니다.</p>
-                <b>👉 왼쪽 사이드바에서 '현대/기아 FAQ 검색'을 클릭하세요.</b>
+                <b>👉 왼쪽 사이드바에서 '기업별 FAQ 검색'을 클릭하세요.</b>
             </div>
             """, unsafe_allow_html=True)
             
         st.markdown("<br><br><br><center><p style='color: #aaaaaa;'>© 2026 Korea Car Data Intelligence Dashboard. All rights reserved.</p></center>", unsafe_allow_html=True)
         
+    # ------------------------------------------
+    # 페이지 2: 통계 대시보드
+    # ------------------------------------------
     elif page == "📊 자동차 등록현황 대시보드":
         st.title("🚗 자동차 등록현황 대시보드")
         
@@ -132,7 +147,7 @@ def main():
                     fig_line.update_layout(xaxis_type='category', yaxis=dict(rangemode='nonnegative'))
                     st.plotly_chart(fig_line, use_container_width=True)
 
-            # [2] 차종별 통계 
+            # [2] 차종별 통계
             elif chart_menu == "차종별 차량등록":
                 st.subheader("📊 차종별 상세 등록 현황 (동급 분류 비교)")
                 if 'drill_path' not in st.session_state:
@@ -169,7 +184,7 @@ def main():
                 else:
                     st.warning("이 항목에 대한 하위 데이터가 존재하지 않습니다.")
 
-            # [3] 지역별 통계 
+            # [3] 지역별 통계
             elif chart_menu == "지역별 교통량 비교":
                 st.subheader("🗺️ 전국 시/도별 총 등록대수 비교")
                 
@@ -180,38 +195,56 @@ def main():
                     names='Category_Name', 
                     values='총계',
                     hole=0.3,
-                    height=700
+                    height=700,
+                    custom_data=['Category_Name']
                 )
                 fig_pie1.update_traces(textposition='inside', textinfo='percent+label', textfont_size=15)
-                st.plotly_chart(fig_pie1, use_container_width=True)
+                fig_pie1.update_layout(clickmode='event+select')
                 
-                st.divider()
-                st.subheader("🔎 특정 지역 세부 차종 비율 조회")
-                sido_list = df_sido['Category_Name'].tolist()
-                selected_sido = st.selectbox("상세 비율을 확인할 시/도를 선택하세요:", options=sido_list)
+                event_pie = st.plotly_chart(
+                    fig_pie1, 
+                    on_select="rerun", 
+                    key="pie_sido",
+                    use_container_width=True
+                )
                 
-                if selected_sido:
-                    sido_data = df_sido[df_sido['Category_Name'] == selected_sido].iloc[0]
-                    df_sido_detail = pd.DataFrame({
-                        '차종': ['승용차', '승합차', '화물차', '특수차'],
-                        '등록대수': [sido_data['승용'], sido_data['승합'], sido_data['화물'], sido_data['특수']]
-                    })
+                if event_pie and event_pie.get("selection") and event_pie["selection"].get("points"):
+                    clicked_point = event_pie["selection"]["points"][0]
+                    clicked_sido = None
                     
-                    fig_pie2 = px.pie(
-                        df_sido_detail,
-                        names='차종',
-                        values='등록대수',
-                        title=f"[{selected_sido}] 승용/승합/화물/특수 차량 비율",
-                        hole=0.4,
-                        height=500
-                    )
-                    fig_pie2.update_traces(textposition='inside', textinfo='percent+label', textfont_size=14)
-                    st.plotly_chart(fig_pie2, use_container_width=True)
+                    if "customdata" in clicked_point and clicked_point["customdata"]:
+                        clicked_sido = clicked_point["customdata"][0]
+                    elif "point_index" in clicked_point:
+                        clicked_sido = df_sido.iloc[clicked_point["point_index"]]['Category_Name']
+                    
+                    if clicked_sido:
+                        st.divider()
+                        st.subheader(f"📊 [{clicked_sido}] 세부 차량 종류별 비율")
+                        
+                        sido_data = df_sido[df_sido['Category_Name'] == clicked_sido].iloc[0]
+                        df_sido_detail = pd.DataFrame({
+                            '차종': ['승용차', '승합차', '화물차', '특수차'],
+                            '등록대수': [sido_data['승용'], sido_data['승합'], sido_data['화물'], sido_data['특수']]
+                        })
+                        
+                        fig_pie2 = px.pie(
+                            df_sido_detail,
+                            names='차종',
+                            values='등록대수',
+                            title=f"[{clicked_sido}] 승용/승합/화물/특수 차량 비율",
+                            hole=0.4,
+                            height=500
+                        )
+                        fig_pie2.update_traces(textposition='inside', textinfo='percent+label', textfont_size=14)
+                        st.plotly_chart(fig_pie2, use_container_width=True, key="pie_sido_detail")
 
         except Exception as e:
             st.error(f"오류가 발생했습니다: {e}")
 
-    elif page == "💬 현대/기아 FAQ 검색":
+    # ------------------------------------------
+    # 페이지 3: FAQ 스마트 검색
+    # ------------------------------------------
+    elif page == "💬 기업별 FAQ 검색":
         st.title("💬 기업별 FAQ 스마트 검색")
         st.write("크롤링된 데이터를 기반으로 궁금하신 카테고리의 답변을 단계별로 확인하세요.")
         
